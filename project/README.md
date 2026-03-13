@@ -215,3 +215,115 @@ Default dev URL:
   - LLM generation
   - robust PDF/table extraction
 - Response formatting keeps `content`, `report`, `charts`, `tables`, and `sources` separated for frontend safety.
+
+
+---
+
+## Environment Setup
+
+1. Copy root example file:
+
+```bash
+cp .env.example .env
+```
+
+2. Fill in required provider keys in `.env`.
+
+### Required API keys by provider
+
+- **Groq**
+  - `GROQ_API_KEY`
+- **Hugging Face**
+  - `HUGGINGFACE_API_KEY` (optional for some local paths, recommended for hosted usage)
+- **Supabase**
+  - `SUPABASE_URL`
+  - `SUPABASE_ANON_KEY` and/or `SUPABASE_SERVICE_ROLE_KEY`
+
+> Security note: keep all backend secrets on the backend only. Frontend should only use `NEXT_PUBLIC_API_BASE_URL`.
+
+### Provider roles in this architecture
+
+- **Groq**: chat completion/model responses (LLM stage)
+- **Hugging Face**: embedding model for chunk vectors
+- **Supabase**: document/chunk storage + vector similarity retrieval backend
+
+Current code provides provider-ready scaffolding and safe runtime checks via `/config-status`.
+
+---
+
+## Supabase Setup Guidance
+
+Recommended schema: `public` (configurable via `SUPABASE_DB_SCHEMA`).
+
+### Table: `documents`
+
+Suggested columns:
+
+- `id uuid primary key default gen_random_uuid()`
+- `file_name text not null`
+- `file_type text`
+- `title text`
+- `storage_path text`
+- `metadata jsonb default '{}'::jsonb`
+- `created_at timestamptz default now()`
+
+### Table: `document_chunks`
+
+Suggested columns:
+
+- `id uuid primary key default gen_random_uuid()`
+- `document_id uuid references documents(id) on delete cascade`
+- `chunk_index int not null`
+- `content text not null`
+- `embedding vector(384)`
+- `metadata jsonb default '{}'::jsonb`
+- `created_at timestamptz default now()`
+
+### Recommended indexes
+
+- Vector index on `embedding` (`ivfflat` or `hnsw`, depending on pgvector/Postgres version)
+- B-tree index on `document_id`
+
+### Embedding dimension note
+
+`sentence-transformers/all-MiniLM-L6-v2` uses **384** dimensions. If you switch embedding models, update:
+
+- Supabase `embedding vector(<new_dim>)`
+- `EMBEDDING_DIMENSION` in configuration
+
+---
+
+## Supabase RPC Function Shape
+
+Recommended RPC function: `match_document_chunks`
+
+Suggested signature:
+
+- `query_embedding vector`
+- `match_count int`
+- `document_filter uuid default null` (optional)
+
+Purpose:
+
+- return nearest chunks by vector similarity
+- optionally constrain to a specific document
+
+The codebase currently scaffolds this function name in configuration (`SUPABASE_MATCH_FUNCTION`) for later full implementation.
+
+---
+
+## Configuration Status Endpoint
+
+`GET /config-status` returns safe provider readiness without exposing secrets, for example:
+
+```json
+{
+  "groq_configured": true,
+  "huggingface_configured": true,
+  "supabase_configured": true,
+  "model": "llama-3.3-70b-versatile",
+  "embedding_model": "sentence-transformers/all-MiniLM-L6-v2",
+  "embedding_dimension": 384,
+  "issues": []
+}
+```
