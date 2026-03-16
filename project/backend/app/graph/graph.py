@@ -94,6 +94,7 @@ class OrchestrationGraph:
                 "query": state.user_query,
                 "rag_output": state.rag_output,
                 "analysis_output": state.analysis_output,
+                "tables": [table.model_dump() for table in state.tables],
                 "charts": [chart.model_dump() for chart in state.chart_output],
             }
         )
