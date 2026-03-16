@@ -1,0 +1,15 @@
+fastapi
+uvicorn
+python-dotenv
+pydantic
+pydantic-settings
+httpx
+supabase
+langchain
+langgraph
+langchain-groq
+sentence-transformers
+huggingface_hub
+pandas
+pymupdf
+python-multipart
