@@ -1,0 +1,25 @@
+# Environment files
+.env
+.env.local
+
+# Python caches
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+
+# Project backend caches
+project/backend/**/__pycache__/
+
+# Frontend dependencies/build
+project/frontend/node_modules/
+project/frontend/.next/
+project/frontend/out/
+
+# Upload/temp artifacts
+project/backend/uploads/
+
+# OS/editor noise
+.DS_Store
+.vscode/
+.idea/
