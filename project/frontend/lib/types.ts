@@ -27,6 +27,9 @@ export type TableSpec = {
   name: string;
   columns: string[];
   rows: Array<Record<string, unknown>>;
+  row_count?: number;
+  numeric_columns?: string[];
+  preview?: Array<Record<string, unknown>>;
 };
 
 export type QueryRequest = {

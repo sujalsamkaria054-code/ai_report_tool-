@@ -24,13 +24,17 @@ class IngestionResult(BaseModel):
 
 
 class PDFService:
-    """Baseline PDF ingestion service with explicit extension points."""
+    """Baseline PDF ingestion service with explicit extension points.
+
+    Tables are normalized in ingestion layer and only safe structured tables
+    are persisted in `IngestionResult.tables`.
+    """
 
     def ingest(self, path: str) -> IngestionResult:
         pdf_bytes = load_pdf(path)
         raw_text = extract_text(pdf_bytes)
         chunks = chunk_text(raw_text)
-        tables = extract_tables(pdf_bytes)
+        tables = [table for table in extract_tables(pdf_bytes) if table.rows]
         embeddings = embed_chunks(chunks)
 
         metadata = DocumentMetadata(
