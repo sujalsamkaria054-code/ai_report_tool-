@@ -84,7 +84,12 @@ class OrchestrationGraph:
         return state
 
     def _chart_node(self, state: GraphState) -> GraphState:
-        chart_payload = self.chart_agent.run(state.analysis_output)
+        chart_payload = self.chart_agent.run(
+            {
+                "analysis": state.analysis_output,
+                "tables": [table.model_dump() for table in state.tables],
+            }
+        )
         state.chart_output = chart_payload if isinstance(chart_payload, list) else []
         return state
 

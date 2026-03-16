@@ -142,10 +142,24 @@ class AnalysisAgent:
 
     @staticmethod
     def _is_numeric_series(values: list[Any]) -> bool:
-        non_null = [value for value in values if value is not None]
+        non_null = [value for value in values if value is not None and str(value).strip() != ""]
         if not non_null:
             return False
-        return all(isinstance(value, (int, float)) and not isinstance(value, bool) for value in non_null)
+
+        numeric_like = 0
+        for value in non_null:
+            if isinstance(value, bool):
+                continue
+            if isinstance(value, (int, float)):
+                numeric_like += 1
+                continue
+            try:
+                float(str(value).replace(",", ""))
+                numeric_like += 1
+            except (TypeError, ValueError):
+                continue
+
+        return numeric_like > 0 and (numeric_like / len(non_null)) >= 0.8
 
     @staticmethod
     def _date_fields(rows: list[dict[str, Any]], columns: list[str]) -> list[str]:
