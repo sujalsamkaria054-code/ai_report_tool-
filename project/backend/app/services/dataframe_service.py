@@ -14,7 +14,7 @@ class DataFrameService:
         frames: dict[str, pd.DataFrame] = {}
         for index, table in enumerate(tables, start=1):
             name = table.name or f"table_{index}"
-            rows = table.rows or []
+            rows = table.rows or table.preview or []
 
             if rows:
                 frame = pd.DataFrame(rows)
@@ -36,6 +36,12 @@ class DataFrameService:
             if name not in excluded:
                 return name
         return None
+
+    @staticmethod
+    def sample_rows(frame: pd.DataFrame, limit: int = 5) -> list[dict[str, Any]]:
+        if frame.empty or limit <= 0:
+            return []
+        return frame.head(limit).where(frame.notna(), None).to_dict(orient="records")
 
     @staticmethod
     def to_records(frame: pd.DataFrame) -> list[dict[str, Any]]:
