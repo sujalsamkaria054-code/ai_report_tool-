@@ -22,7 +22,8 @@ export function ChatWindow() {
   const [activeDocument, setActiveDocument] = useState<ActiveDocument | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const [queryError, setQueryError] = useState<string | null>(null);
 
   const hasMessages = messages.length > 0;
 
@@ -37,7 +38,7 @@ export function ChatWindow() {
     if (!pendingFile || isUploading) return;
 
     setIsUploading(true);
-    setError(null);
+    setUploadError(null);
 
     try {
       const upload = await uploadDocument(pendingFile);
@@ -49,7 +50,7 @@ export function ChatWindow() {
       });
       setPendingFile(null);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Upload failed.");
+      setUploadError(err instanceof Error ? err.message : "Upload failed.");
     } finally {
       setIsUploading(false);
     }
@@ -65,7 +66,7 @@ export function ChatWindow() {
     };
 
     setMessages((prev) => [...prev, userMessage]);
-    setError(null);
+    setQueryError(null);
     setIsLoading(true);
 
     try {
@@ -84,7 +85,7 @@ export function ChatWindow() {
       setMessages((prev) => [...prev, assistantMessage]);
       setInput("");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to process request.");
+      setQueryError(err instanceof Error ? err.message : "Failed to process request.");
     } finally {
       setIsLoading(false);
     }
@@ -106,6 +107,7 @@ export function ChatWindow() {
         isUploading={isUploading}
         onSelectFile={setPendingFile}
         onUpload={handleUpload}
+        uploadError={uploadError}
       />
 
       <div
@@ -166,7 +168,7 @@ export function ChatWindow() {
             </div>
           ) : null}
 
-          {error ? (
+          {queryError ? (
             <div
               style={{
                 border: "1px solid #fecaca",
@@ -177,7 +179,7 @@ export function ChatWindow() {
                 fontSize: 13,
               }}
             >
-              {error}
+              {queryError}
             </div>
           ) : null}
         </div>

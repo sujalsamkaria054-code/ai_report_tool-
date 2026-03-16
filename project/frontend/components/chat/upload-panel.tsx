@@ -11,6 +11,7 @@ type UploadPanelProps = {
   isUploading: boolean;
   onSelectFile: (file: File | null) => void;
   onUpload: () => Promise<void>;
+  uploadError: string | null;
 };
 
 function toFileSizeLabel(bytes: number): string {
@@ -25,6 +26,7 @@ export function UploadPanel({
   isUploading,
   onSelectFile,
   onUpload,
+  uploadError,
 }: UploadPanelProps) {
   const hasPending = Boolean(pendingFile);
 
@@ -100,6 +102,21 @@ export function UploadPanel({
         </div>
       ) : null}
 
+      {uploadError ? (
+        <div
+          style={{
+            border: "1px solid #fecaca",
+            background: "#fef2f2",
+            color: "#991b1b",
+            borderRadius: 10,
+            padding: "10px 12px",
+            fontSize: 12,
+          }}
+        >
+          {uploadError}
+        </div>
+      ) : null}
+
       <div
         style={{
           border: "1px solid #e2e8f0",
@@ -112,7 +129,9 @@ export function UploadPanel({
         {activeDocument ? (
           <>
             <div style={{ fontWeight: 600, marginTop: 6, fontSize: 13 }}>{activeDocument.filename}</div>
-            <div style={{ color: "#334155", fontSize: 12, marginTop: 4 }}>Status: {activeDocument.status}</div>
+            <div style={{ color: "#334155", fontSize: 12, marginTop: 4 }}>
+              Status: {activeDocument.status} · {toFileSizeLabel(activeDocument.sizeBytes)}
+            </div>
             <div style={{ color: "#334155", fontSize: 12 }}>ID: {activeDocument.documentId.slice(0, 12)}...</div>
           </>
         ) : (

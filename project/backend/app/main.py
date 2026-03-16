@@ -2,6 +2,7 @@ from pathlib import Path
 from uuid import uuid4
 
 from fastapi import FastAPI, File, HTTPException, UploadFile
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
 from app.agents.rag_agent import RagAgent
@@ -17,13 +18,23 @@ from app.utils.validators import get_configuration_status, sanitize_filename, va
 logger = get_logger(__name__)
 app = FastAPI(title=settings.app_name, debug=settings.debug)
 
+# Explicit local-dev CORS allowlist for frontend ports 3000/3001.
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=settings.local_dev_cors_origins(),
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 vector_store = VectorStoreService()
 retriever_service = RetrieverService(vector_store=vector_store)
 rag_agent = RagAgent(retriever_service=retriever_service)
 graph = build_graph(rag_agent=rag_agent)
 pdf_service = PDFService()
 
-UPLOAD_DIR = Path('project/backend/uploads')
+BASE_DIR = Path(__file__).resolve().parents[2]
+UPLOAD_DIR = BASE_DIR / 'uploads'
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 DOCUMENTS: dict[str, IngestionResult] = {}
 
@@ -41,9 +52,32 @@ class UploadResponse(BaseModel):
     status: str = 'uploaded'
 
 
+@app.on_event('startup')
+def on_startup() -> None:
+    logger.info(
+        'App startup | env=%s host=%s port=%d upload_dir=%s cors_origins=%s',
+        settings.app_env,
+        settings.host,
+        settings.port,
+        str(UPLOAD_DIR),
+        settings.local_dev_cors_origins(),
+    )
+
+
 @app.get('/health')
 def health() -> dict[str, str]:
     return {'status': 'ok'}
+
+
+@app.get('/debug/app-info')
+def debug_app_info() -> dict[str, object]:
+    """Small non-secret debug endpoint to confirm running app + local config."""
+    return {
+        'app_name': settings.app_name,
+        'app_env': settings.app_env,
+        'upload_dir': str(UPLOAD_DIR),
+        'cors_allow_origins': settings.local_dev_cors_origins(),
+    }
 
 
 @app.get('/config-status')
@@ -56,7 +90,7 @@ def config_status() -> dict[str, object]:
 def query(payload: QueryPayload) -> APIResponse:
     try:
         user_query = validate_query(payload.query)
-        logger.info('Received query: %s', user_query)
+        logger.info('Query request received | has_document=%s', bool(payload.document_id))
 
         tables = []
         sources: list[str] = []
@@ -81,7 +115,8 @@ def query(payload: QueryPayload) -> APIResponse:
         if not state.formatter_output:
             raise HTTPException(status_code=500, detail='Unable to format final response.')
 
-        return APIResponse(**state.formatter_output)
+        logger.info('Formatter output generated | has_report=%s', bool(state.report_output))
+        return APIResponse(**state.formatter_output, document_id=payload.document_id)
     except HTTPException:
         raise
     except ValueError as exc:
@@ -93,42 +128,58 @@ def query(payload: QueryPayload) -> APIResponse:
 
 @app.post('/upload', response_model=UploadResponse)
 async def upload(file: UploadFile = File(...)) -> UploadResponse:
-    content = await file.read()
-    safe_name = sanitize_filename(file.filename or 'uploaded_file.pdf')
-    document_id = uuid4().hex
-    stored_path = UPLOAD_DIR / f'{document_id}_{safe_name}'
-    stored_path.write_bytes(content)
+    try:
+        logger.info('Upload request received | filename=%s content_type=%s', file.filename, file.content_type)
 
-    logger.info('Upload received | filename=%s size_bytes=%d', safe_name, len(content))
+        content = await file.read()
+        if not content:
+            raise HTTPException(status_code=400, detail='Uploaded file is empty.')
 
-    ingestion = pdf_service.ingest(str(stored_path))
-    DOCUMENTS[document_id] = ingestion
+        safe_name = sanitize_filename(file.filename or 'uploaded_file.pdf')
+        document_id = uuid4().hex
+        stored_path = UPLOAD_DIR / f'{document_id}_{safe_name}'
+        stored_path.write_bytes(content)
+        logger.info('Upload file saved | path=%s size_bytes=%d', str(stored_path), len(content))
 
-    items = [
-        {
-            'id': f'{document_id}:{idx}',
-            'text': chunk,
-            'embedding': ingestion.embeddings[idx],
-            'metadata': {'source': str(stored_path), 'document_id': document_id, 'chunk_index': idx},
-        }
-        for idx, chunk in enumerate(ingestion.chunks)
-    ]
-    if items:
-        vector_store.upsert(items)
+        # Keep transport concerns separated from processing for easier diagnosis.
+        logger.info('Ingestion started | document_id=%s', document_id)
+        ingestion = pdf_service.ingest(str(stored_path))
+        logger.info(
+            'Ingestion completed | document_id=%s chunks=%d tables=%d',
+            document_id,
+            len(ingestion.chunks),
+            len(ingestion.tables),
+        )
 
-    logger.info(
-        "Upload complete | document_id=%s chunks=%d tables=%d",
-        document_id,
-        len(ingestion.chunks),
-        len(ingestion.tables),
-    )
+        DOCUMENTS[document_id] = ingestion
 
-    return UploadResponse(
-        document_id=document_id,
-        filename=safe_name,
-        content_type=file.content_type or 'application/octet-stream',
-        size_bytes=len(content),
-    )
+        items = [
+            {
+                'id': f'{document_id}:{idx}',
+                'text': chunk,
+                'embedding': ingestion.embeddings[idx],
+                'metadata': {'source': str(stored_path), 'document_id': document_id, 'chunk_index': idx},
+            }
+            for idx, chunk in enumerate(ingestion.chunks)
+        ]
+        if items:
+            logger.info('Vector upsert started | document_id=%s items=%d', document_id, len(items))
+            vector_store.upsert(items)
+            logger.info('Vector upsert completed | document_id=%s', document_id)
+
+        logger.info('Upload complete | document_id=%s', document_id)
+
+        return UploadResponse(
+            document_id=document_id,
+            filename=safe_name,
+            content_type=file.content_type or 'application/octet-stream',
+            size_bytes=len(content),
+        )
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.exception('Unexpected error during /upload execution')
+        raise HTTPException(status_code=500, detail='Failed to process upload.') from exc
 
 
 if __name__ == '__main__':

@@ -17,6 +17,7 @@ class APIResponse(BaseModel):
     charts: list[ChartSpec] = Field(default_factory=list)
     tables: list[TableSpec] = Field(default_factory=list)
     sources: list[str] = Field(default_factory=list)
+    document_id: str | None = None
 
     @field_validator("content")
     @classmethod

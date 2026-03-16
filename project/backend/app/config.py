@@ -21,6 +21,10 @@ class Settings(BaseSettings):
     host: str = Field(default='0.0.0.0', alias='BACKEND_HOST')
     port: int = Field(default=8000, alias='BACKEND_PORT')
     frontend_url: str = Field(default='http://localhost:3000', alias='FRONTEND_URL')
+    cors_allow_origins: str = Field(
+        default='http://localhost:3000,http://127.0.0.1:3000,http://localhost:3001,http://127.0.0.1:3001',
+        alias='CORS_ALLOW_ORIGINS',
+    )
 
     # Groq
     groq_api_key: str | None = Field(default=None, alias='GROQ_API_KEY')
@@ -62,6 +66,17 @@ class Settings(BaseSettings):
 
     def supabase_ready(self) -> bool:
         return bool(self.supabase_url and (self.supabase_service_role_key or self.supabase_anon_key))
+
+    def local_dev_cors_origins(self) -> list[str]:
+        static_origins = {
+            'http://localhost:3000',
+            'http://127.0.0.1:3000',
+            'http://localhost:3001',
+            'http://127.0.0.1:3001',
+        }
+        configured = {item.strip() for item in self.cors_allow_origins.split(',') if item.strip()}
+        configured.add(self.frontend_url.strip())
+        return sorted(static_origins.union(configured))
 
 
 settings = Settings()

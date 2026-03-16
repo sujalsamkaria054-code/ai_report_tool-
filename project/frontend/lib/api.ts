@@ -1,13 +1,34 @@
 declare const process: { env?: Record<string, string | undefined> } | undefined;
 
-import type {
-  ApiResponse,
-  HealthResponse,
-  QueryRequest,
-  UploadResponse,
-} from "./types";
+import type { ApiResponse, HealthResponse, QueryRequest, UploadResponse } from "./types";
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
+function resolveApiBaseUrl(): string {
+  const envBase = process.env.NEXT_PUBLIC_API_BASE_URL?.trim();
+  if (envBase) {
+    return envBase.replace(/\/$/, "");
+  }
+
+  if (typeof window !== "undefined") {
+    const { protocol, hostname } = window.location;
+    return `${protocol}//${hostname}:8000`;
+  }
+
+  return "http://localhost:8000";
+}
+
+const API_BASE_URL = resolveApiBaseUrl();
+
+function normalizeApiResponse(payload: unknown): ApiResponse {
+  const raw = (payload ?? {}) as Partial<ApiResponse>;
+  return {
+    content: typeof raw.content === "string" ? raw.content : "",
+    report: raw.report ?? null,
+    charts: Array.isArray(raw.charts) ? raw.charts : [],
+    tables: Array.isArray(raw.tables) ? raw.tables : [],
+    sources: Array.isArray(raw.sources) ? raw.sources.map((s) => String(s)) : [],
+    document_id: typeof raw.document_id === "string" ? raw.document_id : null,
+  };
+}
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(`${API_BASE_URL}${path}`, {
@@ -18,7 +39,20 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   });
 
   if (!response.ok) {
-    const detail = await response.text();
+    const contentType = response.headers.get("content-type") ?? "";
+    let detail = "";
+
+    if (contentType.includes("application/json")) {
+      try {
+        const data = (await response.json()) as { detail?: unknown };
+        detail = typeof data.detail === "string" ? data.detail : JSON.stringify(data.detail ?? data);
+      } catch {
+        detail = await response.text();
+      }
+    } else {
+      detail = await response.text();
+    }
+
     throw new Error(`API ${response.status}: ${detail || response.statusText}`);
   }
 
@@ -30,13 +64,15 @@ export async function fetchHealth(): Promise<HealthResponse> {
 }
 
 export async function queryApi(payload: QueryRequest): Promise<ApiResponse> {
-  return request<ApiResponse>("/query", {
+  const response = await request<ApiResponse>("/query", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
     },
     body: JSON.stringify(payload),
   });
+
+  return normalizeApiResponse(response);
 }
 
 export async function uploadDocument(file: File): Promise<UploadResponse> {

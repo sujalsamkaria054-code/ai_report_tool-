@@ -12,6 +12,10 @@ export function MessageCard({ message }: MessageCardProps) {
   const response = message.response;
   const isAssistant = message.role === "assistant";
 
+  const charts = Array.isArray(response?.charts) ? response?.charts : [];
+  const tables = Array.isArray(response?.tables) ? response?.tables : [];
+  const sources = Array.isArray(response?.sources) ? response?.sources : [];
+
   return (
     <article
       style={{
@@ -35,23 +39,23 @@ export function MessageCard({ message }: MessageCardProps) {
 
       {response?.report ? <ReportCard report={response.report} /> : null}
 
-      {response && response.charts.length > 0 ? <ChartRenderer charts={response.charts} /> : null}
+      {charts.length > 0 ? <ChartRenderer charts={charts} /> : null}
 
-      {response && response.tables.length > 0 ? (
+      {tables.length > 0 ? (
         <section style={{ display: "grid", gap: 10 }}>
           <h4 style={{ margin: 0, fontSize: 13, color: "#334155" }}>Tables</h4>
-          {response.tables.map((table, index) => (
+          {tables.map((table, index) => (
             <DataTable
               key={`${table.name}-${index}`}
               title={table.name || `Table ${index + 1}`}
-              columns={table.columns}
-              rows={table.rows}
+              columns={Array.isArray(table.columns) ? table.columns : []}
+              rows={Array.isArray(table.rows) ? table.rows : []}
             />
           ))}
         </section>
       ) : null}
 
-      {response ? <SourceList sources={response.sources} /> : null}
+      <SourceList sources={sources} />
     </article>
   );
 }

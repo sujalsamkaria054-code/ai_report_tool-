@@ -43,6 +43,7 @@ export type ApiResponse = {
   charts: ChartSpec[];
   tables: TableSpec[];
   sources: string[];
+  document_id?: string | null;
 };
 
 export type UploadResponse = {
